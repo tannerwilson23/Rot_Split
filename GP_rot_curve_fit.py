@@ -2,6 +2,7 @@ import sys
 import pymc3 as pm
 import theano.tensor as tt
 import numpy as np
+from astropy.table import Table
 
 import matplotlib.pyplot as plt
 
@@ -49,6 +50,64 @@ ax.plot(X_obs, y, 'ok', ms=3, label="Data");
 ax.set_xlabel("X"); ax.set_ylabel("y"); plt.legend();
 
 
+def splittings(omega, x1, lval):
+    print(x1)
+    vals = []
+    for l in [lval]:
+        freqs = np.array(frequ.loc[frequ['l'] == l]['nu'])
+        for i in range(1,34):
+            area = 0
+            ker = np.array(K_i['l.'+str(l)+'_n.'+str(i)])
+            bet = np.array(beta.loc[beta['l'] == 1]['beta'])[i]
+            if (np.shape(x1)[0] < 4800):
+                ker = ker[0::148]
+            for j in range(len(x1)):
+                print(i,j)
+                area_curr = (x1[j]-x1[j-1])*tt.dot(omega[j],ker[j])
+                area = tt.add(area,area_curr)
+            delt1 = tt.dot(bet,area)
+            vals.append(delt1)
+    vals = tt.as_tensor_variable(vals)
+#    vals = tt.flatten(vals)
+    vals = tt.squeeze(vals)
+    print(vals.ndim)
+    return freqs, vals
+
+# Load stuff once.
+beta = np.loadtxt("beta.dat", skiprows=1) # l, n, beta
+
+def splittings(omega, x, l):
+
+    vals = []
+    for n in range(1, n2 + 1): # 0 to 35?
+
+        area = 0
+        kern = np.loadtxt(
+            "kerns/l.{l:.0f}_n.{n:.0f}".format(l=l, n=n),
+            skiprows=1
+        )
+        # This is bad:
+        if x.size < 4800:
+            v = int(x.size / n2)
+            kern = kern[0::v]
+        
+        # Shouldn't this just be a dot product?
+        for j in range(1, x.size):
+            area = tt.add(
+                area,
+                (x[j] - x[j - 1]) * tt.dot(omega[j], kern[j])
+            )
+        
+        beta_mask = (beta[:, 0] == l) * (beta[:, 1] == n)
+        delta = tt.dot(beta[beta_mask, 2], area)
+        vals.append(delta)
+
+    vals = tt.as_tensor_variable(vals)
+    vals = tt.squeeze(vals)
+    print("vals")
+    print(vals.tag.test_value)
+    return vals
+        
 
 
 class CustomMean(pm.gp.mean.Mean):
@@ -62,27 +121,29 @@ class CustomMean(pm.gp.mean.Mean):
 
     def __call__(self, X):
         rot_prof = tt.squeeze(self.a * tt.exp(tt.dot(-X,self.b)) + self.c)
-        print(rot_prof)
-        print(rot_prof.ndim,rot_prof.shape)
-        return rot_prof
+        # Debugging
+        print("rot_prof: ", rot_prof.tag.test_value)
+        #return rot_prof
 
         # A one dimensional column vector of inputs.
-        n_param = 20
+        X_stumf = np.linspace(0.1, 0.9, n2)[:, None]
 
-        X_stumf = np.linspace(0.1, 0.9, n_param)[:, None]
+        vals = splittings(rot_prof, X_stumf, 1)
+        print("outer vals", vals.tag.test_value)
+        return vals
 
 
 with pm.Model() as model:
 
     ℓ = pm.Gamma("ℓ", alpha=2, beta=4)
-    η = pm.HalfNormal("η", sigma=1.0)
+    η = pm.HalfNormal("η", sd=1.0)
 
     cov_trend = η**2 * pm.gp.cov.ExpQuad(1, ℓ)
 
 
-    a_var = pm.Normal("a_var", mu = 0.4, sigma=0.5)
-    b_var = pm.Normal("b_var", mu = 10., sigma=0.5)
-    c_var = pm.Normal("c_var", mu = 0.4, sigma=0.5)
+    a_var = pm.Normal("a_var", mu = 0.4, sd=0.5)
+    b_var = pm.Normal("b_var", mu = 10., sd=0.5)
+    c_var = pm.Normal("c_var", mu = 0.4, sd=0.5)
 
 
     mean_trend = CustomMean(a = a_var, b= b_var, c= c_var)
@@ -92,9 +153,9 @@ with pm.Model() as model:
     f = gp_trend.prior("f", X = X_obs)
 
     # The Gaussian process is a sum of these three components
-    σ  = pm.HalfNormal("σ",  sigma=2.0)
+    σ  = pm.HalfNormal("σ",  sd=2.0)
 
-    y_ = pm.StudentT('y', mu = f, sigma = σ, nu = 1 ,observed = y)
+    y_ = pm.StudentT('y', mu = f, sd = σ, nu = 1 ,observed = y)
 
     # this line calls an optimizer to find the MAP
     #mp = pm.find_MAP(include_transformed=True)
@@ -128,4 +189,5 @@ lines = [
     ("b_var", {}, 10),
     ("c_var", {}, 0.4),
 ]
-pm.traceplot(trace, lines=lines, var_names=["η", "σ", "ℓ", "a_var","b_var","c_var"]);
+pm.traceplot(trace)
+# lines=lines, varnames=["η", "σ", "ℓ", "a_var","b_var","c_var"]);

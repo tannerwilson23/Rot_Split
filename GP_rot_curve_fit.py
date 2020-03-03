@@ -2,7 +2,8 @@ import sys
 import pymc3 as pm
 import theano.tensor as tt
 import numpy as np
-from astropy.table import Table
+import os
+from glob import glob
 
 import matplotlib.pyplot as plt
 
@@ -74,7 +75,24 @@ def splittings(omega, x1, lval):
     return freqs, vals
 
 # Load stuff once.
+def load_kernels(dirname="kerns/", size=4800):
+    paths = glob(dirname + "/l.*_n.*")
+    max_l = 1 + max([int(path.split(".")[1].split("_")[0]) for path in paths])
+    max_n = 1 + max([int(path.split(".")[-1]) for path in paths])
+
+    kerns = np.nan * np.ones((max_l, max_n, size))
+
+    for l in range(1 + max_l):
+        for n in range(1 + max_n):
+            path = os.path.join(dirname, "l.{l:.0f}_n.{n:.0f}".format(l=l, n=n))
+            if not os.path.exists(path): continue
+            kerns[l, n, :] = np.loadtxt(path, skiprows=1)
+
+    return kerns
+
 beta = np.loadtxt("beta.dat", skiprows=1) # l, n, beta
+kernels = load_kernels()[:, :, ::240]
+
 
 def splittings(omega, x, l):
 
@@ -109,6 +127,28 @@ def splittings(omega, x, l):
     return vals
         
 
+def splittings(omega, x, l):
+
+    vals = []
+    for n in range(1, n2 + 1): # 0 to 35?
+        
+        area = 0
+        for j in range(1, x.size):
+            area = tt.add(
+                area,
+                (x[j] - x[j - 1]) * tt.dot(omega[j], kernels[l, n, j])
+            )
+        
+        beta_mask = (beta[:, 0] == l) * (beta[:, 1] == n)
+        delta = beta[beta_mask, 2] * area
+        vals.append(delta)
+
+    vals = tt.as_tensor_variable(vals)
+    vals = tt.squeeze(vals)
+    print("vals")
+    print(vals.tag.test_value)
+    return vals
+        
 
 class CustomMean(pm.gp.mean.Mean):
 

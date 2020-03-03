@@ -1,0 +1,14 @@
+name: rot-split
+channels:
+  - default
+dependencies:
+  - python=3.5
+  - numpy
+  - scipy
+  - mkl
+  - ipython
+  - matplotlib
+  - theano
+  - pandas
+  - pymc3
+  - pip

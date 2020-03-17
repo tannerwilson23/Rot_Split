@@ -133,31 +133,29 @@ def splittings(omega, x, l):
 #
 class CustomMean(pm.gp.mean.Mean):
 
-    def __init__(self, a = 0, b = 1, c = 0):
+    def __init__(self,l, a = 0, b = 1, c = 0):
         pm.gp.mean.Mean.__init__(self)
         self.a = a
         self.b = b
         self.c = c
+        self.l = l
 
 
     def __call__(self, X):
         print(len(X))
-        rot_prof_0 = tt.squeeze(self.a[0] * tt.exp(tt.dot(-flatx,self.b[0])) + self.c[0])
-        rot_prof_1 = tt.squeeze(self.a[1] * tt.exp(tt.dot(-flatx,self.b[1])) + self.c[1])
-        rot_prof_2 = tt.squeeze(self.a[2] * tt.exp(tt.dot(-flatx,self.b[2])) + self.c[2])
+        l = self.l - 1
+        print(l)
+        rot_prof = tt.squeeze(self.a * tt.exp(tt.dot(-flatx,self.b)) + self.c)
+
         # Debugging
-        print("rot_prof: ", rot_prof_0.tag.test_value)
-        print("rot_prof: ", rot_prof_1.tag.test_value)
-        print("rot_prof: ", rot_prof_2.tag.test_value)
+        print("rot_prof: ", rot_prof)
+
         #return rot_prof
 
         # A one dimensional column vector of inputs.
 
-        vals_1 = splittings(rot_prof_0, flatx, 1)
-        vals_2 = splittings(rot_prof_1, flatx, 2)
-        vals_3 = splittings(rot_prof_2, flatx, 3)
-        vals_full = tt.concatenate((vals_1,vals_2,vals_3))
-        return vals_full
+        vals = splittings(rot_prof, flatx, self.l)
+        return vals
 #
 #
 with pm.Model() as model:
@@ -181,15 +179,24 @@ with pm.Model() as model:
     c_var = pm.Normal("c_var", mu = mu_c, sigma=sigma_c, shape = 3)
 
 
-    mean_trend = CustomMean(a = a_var, b= b_var, c= c_var)
+    mean_trend_1 = CustomMean(1, a = a_var[0], b= b_var[0], c= c_var[0])
+    mean_trend_2 = CustomMean(2, a = a_var[1], b= b_var[1], c= c_var[1])
+    mean_trend_3 = CustomMean(3, a = a_var[2], b= b_var[2], c= c_var[2])
 
-    gp_trend = pm.gp.Latent(mean_func = mean_trend , cov_func=cov_trend)
-    f = gp_trend.prior("f", X = freqs)
+    gp_trend_1 = pm.gp.Latent(mean_func = mean_trend_1 , cov_func=cov_trend)
+    gp_trend_2 = pm.gp.Latent(mean_func = mean_trend_2 , cov_func=cov_trend)
+    gp_trend_3 = pm.gp.Latent(mean_func = mean_trend_3 , cov_func=cov_trend)
+
+    f_1 = gp_trend_1.prior("f_1", X = freqs_1)
+    f_2 = gp_trend_2.prior("f_2", X = freqs_2)
+    f_3 = gp_trend_3.prior("f_3", X = freqs_3)
 
     # The Gaussian process is a sum of these three components
     σ  = pm.HalfNormal("σ",  sd=10.0)
 
-    y_ = pm.Normal('y', mu = f, sigma= σ, observed=split_vals)
+    y_1 = pm.Normal('y_1', mu = f_1, sigma= σ, observed=split_vals_1)
+    y_2 = pm.Normal('y_2', mu = f_2, sigma= σ, observed=split_vals_2)
+    y_3 = pm.Normal('y_3', mu = f_3, sigma= σ, observed=split_vals_3)
     #     y_ = pm.Normal('y', mu = f, sigma = σ, observed = y)
 
     # this line calls an optimizer to find the MAP

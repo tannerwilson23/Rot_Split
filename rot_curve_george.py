@@ -21,6 +21,7 @@ from george import kernels
 import emcee
 
 import corner
+import scipy.optimize as op
 
 
 x_small = pd.read_table('x')
@@ -98,15 +99,16 @@ class Model(Model):
     parameter_names = ("a", "b", "c", "log_sigma")
 
     def get_value(self, t):
-        rot_prof = self.a * np.exp(-0.5*(flatx-self.b)**2 * np.exp(-self.log_sigma)) + self.c
+        rot_prof = self.a * np.exp(-0.5*(flatx-self.b)**2 * np.exp(-2*self.log_sigma)) + self.c
         vals = splittings(rot_prof,1)
         return vals
 
-truth = dict(a=0.4, b=0.1, c = 0.5, log_sigma=np.log(0.4))
+truth = dict(a=0.4, b=10, c = 0.5, log_sigma=np.log(0.4))
 
 kwargs = dict(**truth)
 kwargs["bounds"] = dict(location=(-2, 2))
 mean_model = Model(**kwargs)
+
 gp = george.GP(0.01 * kernels.ExpSquaredKernel(10), mean=mean_model)
 #this is the part where im confused
 #gp.compute(flatx)
@@ -115,8 +117,34 @@ gp.compute(freqs_1, e_split_vals_1)
 
 def lnprob2(p):
     gp.set_parameter_vector(p)
-    return gp.log_likelihood(split_vals_1, quiet=True) + gp.log_prior()
+    return -gp.log_likelihood(split_vals_1, quiet=True) - gp.log_prior()
     
+
+def grad_nll(p):
+    gp.set_parameter_vector(p)
+    return -gp.grad_log_likelihood(split_vals_1, quiet=True)
+
+#take a plot of initial guess
+plt.figure()
+plt.plot(freqs_1,split_vals_1,label = 'Real')
+plt.plot(freqs_1,mean_model.get_value(1), label = 'First Guess')
+plt.legend(loc = 'best')
+plt.show()
+
+print(gp.log_likelihood(split_vals_1))
+
+p0 = gp.get_parameter_vector()
+results = op.minimize(lnprob2, p0)
+
+gp.set_parameter_vector(results.x)
+print(gp.log_likelihood(split_vals_1))
+
+plt.figure()
+plt.plot(freqs_1,split_vals_1,label = 'Real')
+plt.plot(freqs_1,mean_model.get_value(1), label = 'Optimized Guess')
+plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
+plt.legend(loc = 'best')
+plt.show()
     
 initial = gp.get_parameter_vector()
 ndim, nwalkers = len(initial), 32
@@ -145,7 +173,7 @@ x = np.linspace(-5, 5, 500)
 samples = sampler.flatchain
 for s in samples[np.random.randint(len(samples), size=24)]:
     gp.set_parameter_vector(s)
-    mu = gp.sample_conditional(split_vals_1, freqs_1)
+    mu = gp.sample_conditional(split_vals_1,1)
     plt.plot(freqs_1, mu, color="#4682b4", alpha=0.3)
 
 plt.ylabel(r"$y$")

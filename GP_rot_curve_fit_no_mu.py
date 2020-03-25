@@ -10,6 +10,25 @@ from scipy.integrate import simps,cumtrapz
 
 import matplotlib.pyplot as plt
 
+import functools
+import warnings
+
+import numpy as np
+import theano.tensor as tt
+
+import pymc3 as pm
+from pymc3.gp.cov import Covariance, Constant
+from pymc3.gp.mean import Zero
+from pymc3.gp.util import (conditioned_vars, infer_shape,
+                           stabilize, cholesky, solve_lower, solve_upper)
+from pymc3.distributions import draw_values
+from theano.tensor.nlinalg import eigh
+
+
+__all__ = ['Latent_Rot']
+
+
+
 # set the seed
 np.random.seed(5)
 
@@ -103,7 +122,15 @@ plt.show()
 #
 #
 #
-#
+#this needs to change of this to work.
+#not sure if this means i have to change my freqs
+
+#X2 = tt.sum(tt.square(flatx), 1)
+#if Xs is None:
+#    sqd = -2.0 * tt.dot(X, tt.transpose(X)) + (
+#        tt.reshape(X2, (-1, 1)) + tt.reshape(X2, (1, -1))
+#    )
+
 x_diffs = np.zeros_like(flatx)
 for j in range(1,len(flatx)):
     x_diffs[j] = flatx[j] - flatx[j-1]
@@ -113,10 +140,13 @@ x_diffs_eh = x_diffs[:, None]
 
 
 
+
+
+
 #need to change here to be able to take in the range of the n values for the specific l
 #need to spit out all of the possible frequencies and the splitting vlaues and these
 #need to be the same size
-def splittings(omega, x, l):
+def splittings(omega, l):
     vals = []
     for n in frequ.loc[frequ['l']==l]['n']: # 0 to 35?
         area = tt.dot(
@@ -135,18 +165,32 @@ def splittings(omega, x, l):
 #
 #
 class RotSplitCov(pm.gp.cov.Covariance):
+    
     def __init__(self, n, l):
         super(RotSplitCov, self).__init__(1, None)
         self.n = n
         self.l = l
-
+        
+    def square_dist(self, X, Xs):
+        X = tt.mul(X, 1.0 / self.l)
+        X2 = tt.sum(tt.square(X), 1)
+        if Xs is None:
+            sqd = -2.0 * tt.dot(X, tt.transpose(X)) + (
+                tt.reshape(X2, (-1, 1)) + tt.reshape(X2, (1, -1))
+            )
+        else:
+            Xs = tt.mul(Xs, 1.0 / self.l)
+            Xs2 = tt.sum(tt.square(Xs), 1)
+            sqd = -2.0 * tt.dot(X, tt.transpose(Xs)) + (
+                tt.reshape(X2, (-1, 1)) + tt.reshape(Xs2, (1, -1))
+            )
+        return tt.clip(sqd, 0.0, np.inf)
 
     def full(self, X, Xs=None):
         X, Xs = self._slice(X, Xs)
 
-        prof = tt.squeeze(self.n**2 * tt.exp(-0.5 * x_diffs**2/self.l**2))
-        
-        return splittings(prof,flatx,1)
+        prof = self.n**2 * tt.exp(-0.5 * self.square_dist(X, Xs)/self.l**2)
+        return prof
 #
 #
 with pm.Model() as model:
@@ -157,7 +201,7 @@ with pm.Model() as model:
     cov_trend = RotSplitCov(η,ℓ)
 
 
-    gp_trend = pm.gp.Latent(cov_func=cov_trend)
+    gp_trend = Latent_Rot(cov_func=cov_trend)
     f = gp_trend.prior("f", X = freqs_1)
 
     # The Gaussian process is a sum of these three components
@@ -200,3 +244,182 @@ plt.title("Posterior distribution over $f(x)$ at the observed values"); plt.lege
 #]
 #pm.traceplot(trace)
 ## lines=lines, varnames=["η", "σ", "ℓ", "a_var","b_var","c_var"]);
+
+
+class Base:
+    R"""
+    Base class.
+    """
+
+    def __init__(self, mean_func=Zero(), cov_func=Constant(0.0)):
+        self.mean_func = mean_func
+        self.cov_func = cov_func
+
+    def __add__(self, other):
+        same_attrs = set(self.__dict__.keys()) == set(other.__dict__.keys())
+        if not isinstance(self, type(other)) or not same_attrs:
+            raise TypeError("Cannot add different GP types")
+        mean_total = self.mean_func + other.mean_func
+        cov_total = self.cov_func + other.cov_func
+        return self.__class__(mean_total, cov_total)
+
+    def prior(self, name, X, *args, **kwargs):
+        raise NotImplementedError
+
+    def marginal_likelihood(self, name, X, *args, **kwargs):
+        raise NotImplementedError
+
+    def conditional(self, name, Xnew, *args, **kwargs):
+        raise NotImplementedError
+
+    def predict(self, Xnew, point=None, given=None, diag=False):
+        raise NotImplementedError
+
+
+
+@conditioned_vars(["X", "f"])
+class Latent_Rot(Base):
+    R"""
+    Latent Gaussian process, converts the evaluated covariance into a mean function then applies rotational splittings.
+
+
+    Parameters
+    ----------
+    cov_func : None, 2D array, or instance of Covariance
+        The covariance function.  Defaults to zero.
+    mean_func : None, instance of Mean
+        The mean function.  Defaults to zero.
+
+    Examples
+    --------
+    .. code:: python
+
+        # A one dimensional column vector of inputs.
+        X = np.linspace(0, 1, 10)[:, None]
+
+        with pm.Model() as model:
+            # Specify the covariance function.
+            cov_func = pm.gp.cov.ExpQuad(1, ls=0.1)
+
+            # Specify the GP.  The default mean function is `Zero`.
+            gp = pm.gp.Latent(cov_func=cov_func)
+
+            # Place a GP prior over the function f.
+            f = gp.prior("f", X=X)
+
+        ...
+
+        # After fitting or sampling, specify the distribution
+        # at new points with .conditional
+        Xnew = np.linspace(-1, 2, 50)[:, None]
+
+        with model:
+            fcond = gp.conditional("fcond", Xnew=Xnew)
+    """
+
+    def __init__(self, mean_func=Zero(), cov_func=Constant(0.0)):
+        super().__init__(mean_func, cov_func)
+
+    def _build_prior(self, name, X, reparameterize=True, **kwargs):
+        x = flatx
+        mu = self.mean_func(x)
+        cov = stabilize(self.cov_func(x))
+        shape = infer_shape(X, kwargs.pop("shape", None))
+        if reparameterize:
+            v = pm.Normal(name + "_rotated_", mu=0.0, sigma=1.0, shape=shape, **kwargs)
+            f = pm.Deterministic(name, mu + cholesky(cov).dot(v))
+        else:
+            f = pm.MvNormal(name, mu=mu, cov=cov, shape=shape, **kwargs)
+        return f
+
+    def prior(self, name, X, reparameterize=True, **kwargs):
+        R"""
+        Returns the GP prior distribution evaluated over the input
+        locations `X`.
+
+        This is the prior probability over the space
+        of functions described by its mean and covariance function.
+
+        .. math::
+
+           f \mid X \sim \text{MvNormal}\left( \mu(X), k(X, X') \right)
+
+        Parameters
+        ----------
+        name : string
+            Name of the random variable
+        X : array-like
+            Function input values.
+        reparameterize : bool
+            Reparameterize the distribution by rotating the random
+            variable by the Cholesky factor of the covariance matrix.
+        **kwargs
+            Extra keyword arguments that are passed to distribution constructor.
+        """
+
+        f = self._build_prior(name, X, reparameterize, **kwargs)
+        self.X = X
+        self.f = f
+        #call splittings here
+        vals = splittings(f,1)
+        return vals
+
+    def _get_given_vals(self, given):
+        if given is None:
+            given = {}
+        if 'gp' in given:
+            cov_total = given['gp'].cov_func
+            mean_total = given['gp'].mean_func
+        else:
+            cov_total = self.cov_func
+            mean_total = self.mean_func
+        if all(val in given for val in ['X', 'f']):
+            X, f = given['X'], given['f']
+        else:
+            X, f = self.X, self.f
+        return X, f, cov_total, mean_total
+
+    def _build_conditional(self, Xnew, X, f, cov_total, mean_total):
+        Kxx = cov_total(X)
+        Kxs = self.cov_func(X, Xnew)
+        L = cholesky(stabilize(Kxx))
+        A = solve_lower(L, Kxs)
+        v = solve_lower(L, f - mean_total(X))
+        mu = self.mean_func(Xnew) + tt.dot(tt.transpose(A), v)
+        Kss = self.cov_func(Xnew)
+        cov = Kss - tt.dot(tt.transpose(A), A)
+        return mu, cov
+
+    def conditional(self, name, Xnew, given=None, **kwargs):
+        R"""
+        Returns the conditional distribution evaluated over new input
+        locations `Xnew`.
+
+        Given a set of function values `f` that
+        the GP prior was over, the conditional distribution over a
+        set of new points, `f_*` is
+
+        .. math::
+
+           f_* \mid f, X, X_* \sim \mathcal{GP}\left(
+               K(X_*, X) K(X, X)^{-1} f \,,
+               K(X_*, X_*) - K(X_*, X) K(X, X)^{-1} K(X, X_*) \right)
+
+        Parameters
+        ----------
+        name : string
+            Name of the random variable
+        Xnew : array-like
+            Function input values.
+        given : dict
+            Can optionally take as key value pairs: `X`, `y`, `noise`,
+            and `gp`.  See the section in the documentation on additive GP
+            models in PyMC3 for more information.
+        **kwargs
+            Extra keyword arguments that are passed to `MvNormal` distribution
+            constructor.
+        """
+        givens = self._get_given_vals(given)
+        mu, cov = self._build_conditional(Xnew, *givens)
+        shape = infer_shape(Xnew, kwargs.pop("shape", None))
+        return pm.MvNormal(name, mu=mu, cov=cov, shape=shape, **kwargs)

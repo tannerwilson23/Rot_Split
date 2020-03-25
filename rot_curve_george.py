@@ -134,7 +134,7 @@ plt.show()
 print(gp.log_likelihood(split_vals_1))
 
 p0 = gp.get_parameter_vector()
-results = op.minimize(lnprob2, p0)
+results = op.minimize(lnprob2, p0, method = 'L-BFGS-B')
 
 gp.set_parameter_vector(results.x)
 print(gp.log_likelihood(split_vals_1))
@@ -163,7 +163,7 @@ sampler.reset()
 print("Running production...")
 sampler.run_mcmc(p0, 2000);
 
-# Plot the data.
+# Plot the data
 plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
 
 # The positions where the prediction should be computed.

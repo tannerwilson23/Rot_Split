@@ -96,28 +96,39 @@ def splittings(omega, l):
     return vals
 
 class Model(Model):
-    parameter_names = ("a", "b", "c", "log_sigma")
+    parameter_names = ("a", "b", "c")
 
     def get_value(self, t):
-        rot_prof = self.a * np.exp(-0.5*(flatx-self.b)**2 * np.exp(-2*self.log_sigma)) + self.c
+        rot_prof = self.a * np.exp(-0.5*(flatx-self.b)**2) + self.c
         vals = splittings(rot_prof,1)
         return vals
 
-truth = dict(a=0.4, b=10, c = 0.5, log_sigma=np.log(0.4))
+truth = dict(a=0.4, b=0.5, c=0.5)#log_sigma=np.log(0.4))
 
 kwargs = dict(**truth)
 kwargs["bounds"] = dict(location=(-2, 2))
 mean_model = Model(**kwargs)
 
-gp = george.GP(0.01 * kernels.ExpSquaredKernel(10), mean=mean_model)
+gp = george.GP(0.01 * kernels.ExpSquaredKernel(metric=1000), mean=mean_model)
 #this is the part where im confused
 #gp.compute(flatx)
 
 gp.compute(freqs_1, e_split_vals_1)
 
-def lnprob2(p):
+def log_prior(p):
+    a, b, c, k1_log_constant, k2_log_M_0 = p
+    if not (15 >= b >= 0):
+        return -np.inf
+    return 0
+
+
+def log_prob(p):
     gp.set_parameter_vector(p)
-    return -gp.log_likelihood(split_vals_1, quiet=True) - gp.log_prior()
+    return log_prior(p) \
+        +   gp.log_prior() + gp.log_likelihood(split_vals_1, quiet=True)
+
+def negative_log_prob(p):
+    return -log_prob(p)
     
 
 def grad_nll(p):
@@ -127,58 +138,64 @@ def grad_nll(p):
 #take a plot of initial guess
 plt.figure()
 plt.plot(freqs_1,split_vals_1,label = 'Real')
-plt.plot(freqs_1,mean_model.get_value(1), label = 'First Guess')
+plt.plot(freqs_1,mean_model.get_value(None), label = 'First Guess')
 plt.legend(loc = 'best')
 plt.show()
 
 print(gp.log_likelihood(split_vals_1))
 
 p0 = gp.get_parameter_vector()
-results = op.minimize(lnprob2, p0, method = 'L-BFGS-B')
+results = op.minimize(negative_log_prob, p0, method = 'L-BFGS-B')
 
 gp.set_parameter_vector(results.x)
 print(gp.log_likelihood(split_vals_1))
 
 plt.figure()
 plt.plot(freqs_1,split_vals_1,label = 'Real')
-plt.plot(freqs_1,mean_model.get_value(1), label = 'Optimized Guess')
+plt.plot(freqs_1,mean_model.get_value(None), label = 'Optimized Guess')
 plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
 plt.legend(loc = 'best')
 plt.show()
-    
+
+
+fig, ax = plt.subplots()
+ax.plot(freqs_1, mean_model.get_value(None))
+ax.scatter(freqs_1, split_vals_1)
+
+
+
 initial = gp.get_parameter_vector()
 ndim, nwalkers = len(initial), 32
-sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob2)
+sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
 
 print("Running first burn-in...")
-p0 = initial + 1e-8 * np.random.randn(nwalkers, ndim)
-p0, lp, _ = sampler.run_mcmc(p0, 2000)
+p0 = initial + 1e-4 * np.random.randn(nwalkers, ndim)
+state = sampler.run_mcmc(p0, 2000)
+sampler.reset()
 
-print("Running second burn-in...")
-p0 = p0[np.argmax(lp)] + 1e-8 * np.random.randn(nwalkers, ndim)
-sampler.reset()
-p0, _, _ = sampler.run_mcmc(p0, 2000)
-sampler.reset()
 
 print("Running production...")
-sampler.run_mcmc(p0, 2000);
+sampler.run_mcmc(state, 2000)
+
+fig = plt.subplots()
 
 # Plot the data
 plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
 
 # The positions where the prediction should be computed.
-x = np.linspace(-5, 5, 500)
+# ARC says: not sure what this was meant for...
+#x = np.linspace(-5, 5, 500)
 
 # Plot 24 posterior samples.
 samples = sampler.flatchain
 for s in samples[np.random.randint(len(samples), size=24)]:
     gp.set_parameter_vector(s)
-    mu = gp.sample_conditional(split_vals_1,1)
+    mu = gp.sample_conditional(split_vals_1, freqs_1)
     plt.plot(freqs_1, mu, color="#4682b4", alpha=0.3)
 
 plt.ylabel(r"$y$")
 plt.xlabel(r"$t$")
-plt.xlim(-5, 5)
+#plt.xlim(-5, 5)
 plt.title("fit with GP noise model");
 #
 #names = gp.get_parameter_names()

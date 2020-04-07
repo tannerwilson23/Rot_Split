@@ -53,18 +53,46 @@ beta = np.loadtxt("beta.dat", skiprows=1) # l, n, beta
 kerns = load_kernels()
 
 
+freqnu = frequ.loc[frequ['n'] > 5]
+freqnl = freqnu.loc[freqnu['n'] < 20]
 
-freqs_1 = np.array(frequ.loc[frequ['l'] == 1]['Freqs'])
-freqs_2 = np.array(frequ.loc[frequ['l'] == 2]['Freqs'])
-freqs_3 = np.array(frequ.loc[frequ['l'] == 3]['Freqs'])
 
-split_vals_1 = np.array(frequ.loc[frequ['l'] == 1]['delta'])*1E-4
-split_vals_2 = np.array(frequ.loc[frequ['l'] == 2]['delta'])*1E-4
-split_vals_3 = np.array(frequ.loc[frequ['l'] == 3]['delta'])*1E-4
+freqs_1 = np.array(freqnl.loc[freqnl['l'] == 1]['Freqs'])
+freqs_2 = np.array(freqnl.loc[freqnl['l'] == 2]['Freqs'])
+freqs_3 = np.array(freqnl.loc[freqnl['l'] == 3]['Freqs'])
 
-e_split_vals_1 = np.array(frequ.loc[frequ['l'] == 1]['e_delta'])*1E-4
-e_split_vals_2 = np.array(frequ.loc[frequ['l'] == 2]['e_delta'])*1E-4
-e_split_vals_3 = np.array(frequ.loc[frequ['l'] == 3]['e_delta'])*1E-4
+
+lone = np.ones((np.shape(freqs_1)[0],2))
+ltwo = 2*np.ones((np.shape(freqs_2)[0],2))
+lthree = 3*np.ones((np.shape(freqs_3)[0],2))
+
+lone[:,0] = freqs_1
+ltwo[:,0] = freqs_2
+lthree[:,0] = freqs_3
+
+xvals = np.append(lone,ltwo,axis = 0)
+xvals = np.append(xvals,lthree,axis = 0)
+
+freqs = np.array([freqs_1,freqs_2,freqs_3])
+
+split_vals_1 = np.array(freqnl.loc[freqnl['l'] == 1]['delta'])
+split_vals_2 = np.array(freqnl.loc[freqnl['l'] == 2]['delta'])
+split_vals_3 = np.array(freqnl.loc[freqnl['l'] == 3]['delta'])
+
+
+split_vals_plot = np.array([split_vals_1,split_vals_2,split_vals_3])
+
+split_vals = np.append(split_vals_1,split_vals_2)
+split_vals = np.append(split_vals, split_vals_3)
+
+
+
+e_split_vals_1 = np.array(freqnl.loc[freqnl['l'] == 1]['e_delta'])
+e_split_vals_2 = np.array(freqnl.loc[freqnl['l'] == 2]['e_delta'])
+e_split_vals_3 = np.array(freqnl.loc[freqnl['l'] == 3]['e_delta'])
+
+e_split_vals = np.append(e_split_vals_1,e_split_vals_2)
+e_split_vals = np.append(e_split_vals, e_split_vals_3)
 
 
 fig = plt.figure(figsize=(12,5)); ax = fig.gca()
@@ -72,7 +100,7 @@ ax.plot(freqs_1, split_vals_1, lw=3, label="l = 1");
 ax.plot(freqs_2, split_vals_2, lw=3, label="l = 2");
 ax.plot(freqs_3, split_vals_3, lw=3, label="l = 3");
 
-ax.set_xlabel("X"); ax.set_ylabel("y"); plt.legend();
+ax.set_xlabel("Frequency"); ax.set_ylabel("Splitting Value"); plt.legend();
 plt.show()
 
 
@@ -83,7 +111,7 @@ for j in range(1,len(flatx)):
     
 def splittings(omega, l):
     vals = []
-    for n in frequ.loc[frequ['l']==l]['n']: # 0 to 35?
+    for n in freqnl.loc[freqnl['l']==l]['n']: # 0 to 35?
         area = np.dot(
             x_diffs,
             omega * kerns[l, n, :]
@@ -96,36 +124,63 @@ def splittings(omega, l):
     return vals
 
 class Model(Model):
-    parameter_names = ("a", "b", "c")
+    parameter_names = ("a", "b","d")
 
     def get_value(self, t):
-        rot_prof = self.a * np.exp(-0.5*(flatx-self.b)**2) + self.c
-        vals = splittings(rot_prof,1)
+        rot_prof = self.a * np.exp((flatx*self.b))+self.d
+        vals = np.append(splittings(rot_prof,1),splittings(rot_prof,2))
+        vals = np.append(vals,splittings(rot_prof,3))
         return vals
 
-truth = dict(a=0.4, b=0.5, c=0.5)#log_sigma=np.log(0.4))
+    def get_value_plot(self, t):
+        rot_prof = self.a * np.exp((flatx*self.b))+self.d
+        vals = np.array([splittings(rot_prof,1),splittings(rot_prof,2),splittings(rot_prof,3)])
+        return vals
+
+truth = dict(a=10, b=5, d= 400)#log_sigma=np.log(0.4))
 
 kwargs = dict(**truth)
-kwargs["bounds"] = dict(location=(-2, 2))
+kwargs["bounds"] = dict(a=(-50,50),b = (0,15),d = (200,500))
+#kwargs["bounds"] = dict(a=(-5,5), b = (0,15),c = (0,10.))
 mean_model = Model(**kwargs)
 
-gp = george.GP(0.01 * kernels.ExpSquaredKernel(metric=1000), mean=mean_model)
+
+
+#gp = george.GP(0.001 * kernels.ExpSquaredKernel(metric=([1,0],[0,1]), metric_bounds = [(0,7),(None,None),(-5,-2)], ndim = 2), mean=mean_model)
+
+#gp = george.GP(1 * kernels.ExpSquaredKernel(metric=np.array([[1,0],[0,100]]), metric_bounds=[(-5, 5), (None, None), (-5, -2.3)], ndim=2), mean=mean_model)
+
+
+#gp = george.GP(1 * kernels.ExpSquaredKernel(metric=1e-3 * np.eye(2), ndim=2, metric_bounds=[(-5, 5), (None, None), (-5, -2.3)]), mean = mean_model)
+
+gp = george.GP(1 * kernels.ExpSquaredKernel(metric=1e-3 * np.eye(2), ndim=2, metric_bounds=[(-10, 10), (None, None), (-5, -2.3)]))
+
+
+gp.set_parameter('kernel:k2:metric:L_0_1',0)
+gp.freeze_parameter('kernel:k2:metric:L_0_1')
+
 #this is the part where im confused
 #gp.compute(flatx)
 
-gp.compute(freqs_1, e_split_vals_1)
+
+
+gp.compute(xvals, e_split_vals)
 
 def log_prior(p):
-    a, b, c, k1_log_constant, k2_log_M_0 = p
-    if not (15 >= b >= 0):
-        return -np.inf
+    #a, b, d,k1_log_constant, k2_M_0, k2_M_1 = p
+    k1_log_constant, k2_M_0, k2_M_1 = p
+
+#    if not (15 >= b >= 0):
+#        return -np.inf
+#    if not all(i > 0 for i in (a * np.exp((flatx*b)-c))):
+#        return -np.inf
     return 0
 
 
 def log_prob(p):
     gp.set_parameter_vector(p)
     return log_prior(p) \
-        +   gp.log_prior() + gp.log_likelihood(split_vals_1, quiet=True)
+        +   gp.log_prior() + gp.log_likelihood(split_vals, quiet=True)
 
 def negative_log_prob(p):
     return -log_prob(p)
@@ -133,73 +188,123 @@ def negative_log_prob(p):
 
 def grad_nll(p):
     gp.set_parameter_vector(p)
-    return -gp.grad_log_likelihood(split_vals_1, quiet=True)
+    return -gp.grad_log_likelihood(split_vals, quiet=True)
 
 #take a plot of initial guess
 plt.figure()
-plt.plot(freqs_1,split_vals_1,label = 'Real')
-plt.plot(freqs_1,mean_model.get_value(None), label = 'First Guess')
+
+plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess', color = 'red', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess',color = 'red', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess', color = 'green', linestyle = '-.')
 plt.legend(loc = 'best')
+plt.title('First Guess splitting values')
 plt.show()
 
-print(gp.log_likelihood(split_vals_1))
+
+
+
+print(gp.log_likelihood(split_vals))
 
 p0 = gp.get_parameter_vector()
-results = op.minimize(negative_log_prob, p0, method = 'L-BFGS-B')
-
+results = op.minimize(negative_log_prob, p0, method = 'Nelder-Mead')
+print(results.x)
 gp.set_parameter_vector(results.x)
-print(gp.log_likelihood(split_vals_1))
+print(gp.log_likelihood(split_vals))
+
+
+
+
 
 plt.figure()
-plt.plot(freqs_1,split_vals_1,label = 'Real')
-plt.plot(freqs_1,mean_model.get_value(None), label = 'Optimized Guess')
-plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
+plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
+plt.errorbar(freqs[0],split_vals_plot[0],yerr = e_split_vals_1, fmt=".r", capsize=0)
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized Guess', color ='red', linestyle = '-.')
+
+plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized Guess', color ='blue', linestyle = '-.')
+plt.errorbar(freqs[1],split_vals_plot[1],yerr = e_split_vals_2, fmt=".b", capsize=0)
+
+plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized Guess', color ='green', linestyle = '-.')
+plt.errorbar(freqs[2],split_vals_plot[2],yerr = e_split_vals_2, fmt=".g", capsize=0)
+plt.title('optimized')
 plt.legend(loc = 'best')
 plt.show()
 
+plt.figure()
+#ao,bo,co,do = mean_model.get_parameter_vector()
+#plt.plot(flatx,(ao * np.exp((flatx*bo)-co)+do))
+plt.title('Rotation Curve')
+plt.xlabel('r/R')
+plt.ylabel(r'$\Omega$')
+plt.show()
 
-fig, ax = plt.subplots()
-ax.plot(freqs_1, mean_model.get_value(None))
-ax.scatter(freqs_1, split_vals_1)
+#
 
 
 
 initial = gp.get_parameter_vector()
-ndim, nwalkers = len(initial), 32
+ndim, nwalkers = len(initial), 50
 sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob)
 
 print("Running first burn-in...")
-p0 = initial + 1e-4 * np.random.randn(nwalkers, ndim)
-state = sampler.run_mcmc(p0, 2000)
-sampler.reset()
+p0 = initial + 1e-5 * np.random.randn(nwalkers, ndim)
+state = sampler.run_mcmc(p0, 5000)
 
 
-print("Running production...")
-sampler.run_mcmc(state, 2000)
 
 fig = plt.subplots()
 
 # Plot the data
-plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
+#plt.errorbar(freqs_1, split_vals_1, yerr=e_split_vals_1, fmt=".k", capsize=0)
 
 # The positions where the prediction should be computed.
 # ARC says: not sure what this was meant for...
 #x = np.linspace(-5, 5, 500)
 
 # Plot 24 posterior samples.
-samples = sampler.flatchain
-for s in samples[np.random.randint(len(samples), size=24)]:
+samples = sampler.flatchain[125,:]
+for s in samples[np.random.randint(len(samples), size=50)]:
     gp.set_parameter_vector(s)
-    mu = gp.sample_conditional(split_vals_1, freqs_1)
-    plt.plot(freqs_1, mu, color="#4682b4", alpha=0.3)
+    mu = gp.sample_conditional(split_vals, xvals)
+    plt.plot(freqs[0], mu[0:14], color="red", alpha=0.3)
+    plt.plot(freqs[1], mu[14:28], color="blue", alpha=0.3)
+    plt.plot(freqs[2], mu[28:42], color="green", alpha=0.3)
+    
 
-plt.ylabel(r"$y$")
-plt.xlabel(r"$t$")
+
+plt.ylabel("Splitting")
+plt.xlabel("Frequency")
 #plt.xlim(-5, 5)
-plt.title("fit with GP noise model");
+plt.title("Sampled with GP noise model");
 #
-#names = gp.get_parameter_names()
-#inds = np.array([names.index("mean:"+k) for k in tri_cols])
-#corner.corner(sampler.flatchain[:, inds], truths=tri_truths, labels=tri_labels);
-#
+names = gp.get_parameter_names()
+inds = np.array([names.index(k) for k in names])
+corner.corner(sampler.flatchain[125000:-1, inds], labels=names);
+
+names = gp.get_parameter_names()
+corner.corner(sampler.chain[:, 2500:, :].reshape((-1, 3)), labels=names)
+
+plt.figure()
+fig, axs = plt.subplots(3)
+fig.suptitle('Sampler Chains')
+for i in range(50): axs[0].plot(sampler.chain[i,:,0],color = 'tab:blue', alpha = 0.01)
+for i in range(50): axs[1].plot(sampler.chain[i,:,1],color = 'tab:blue', alpha = 0.01)
+for i in range(50): axs[2].plot(sampler.chain[i,:,2],color = 'tab:blue', alpha = 0.01)
+#for i in range(50): axs[3].plot(sampler.chain[i,:,3],color = 'tab:blue', alpha = 0.01)
+#for i in range(50): axs[4].plot(sampler.chain[i,:,4],color = 'tab:blue', alpha = 0.01)
+#for i in range(50): axs[5].plot(sampler.chain[i,:,5],color = 'tab:blue', alpha = 0.01)
+#for i in range(50): axs[6].plot(sampler.chain[i,:,6],color = 'tab:blue', alpha = 0.01)
+
+#axs[0].set_ylabel('a')
+#axs[1].set_ylabel('b')
+#axs[2].set_ylabel('d')
+axs[0].set_ylabel('Log_constant')
+axs[1].set_ylabel('log_L_0_0')
+axs[2].set_ylabel('log_L_1_1')
+
+
 

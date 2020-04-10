@@ -94,14 +94,15 @@ e_split_vals_3 = np.array(freqnl.loc[freqnl['l'] == 3]['e_delta'])
 e_split_vals = np.append(e_split_vals_1,e_split_vals_2)
 e_split_vals = np.append(e_split_vals, e_split_vals_3)
 
-
-fig = plt.figure(figsize=(12,5)); ax = fig.gca()
-ax.plot(freqs_1, split_vals_1, lw=3, label="l = 1");
-ax.plot(freqs_2, split_vals_2, lw=3, label="l = 2");
-ax.plot(freqs_3, split_vals_3, lw=3, label="l = 3");
-
-ax.set_xlabel("Frequency"); ax.set_ylabel("Splitting Value"); plt.legend();
-plt.show()
+#
+#fig = plt.figure(figsize=(12,5)); ax = fig.gca()
+#ax.plot(freqs_1, split_vals_1, lw=3, label="l = 1");
+#ax.plot(freqs_2, split_vals_2, lw=3, label="l = 2");
+#ax.plot(freqs_3, split_vals_3, lw=3, label="l = 3");
+#
+#ax.set_xlabel("Frequency"); ax.set_ylabel("Splitting Value"); plt.legend();
+#plt.title('True Solar Splittings")
+#plt.show()
 
 
 x_diffs = np.zeros_like(flatx)
@@ -159,18 +160,18 @@ actual_2 = splittings(actual_rot,2)
 actual_3 = splittings(actual_rot,3)
 
 
-plt.plot(freqs_1,actual_1)
-plt.plot(freqs_2,actual_2)
-plt.plot(freqs_3,actual_3)
+plt.plot(freqs_1,actual_1,label = 'Splittings using Solar Rot Prof. l = 1', color = 'tab:red')
+plt.plot(freqs_2,actual_2,label = 'Splittings using Solar Rot Prof. l = 2', color = 'tab:blue')
+plt.plot(freqs_3,actual_3,label = 'Splittings using Solar Rot Prof. l = 3', color = 'tab:green')
 
-plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
+plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'tab:red')
 #plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess', color = 'red', linestyle = '-.')
-plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
+plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'tab:blue')
 #plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess',color = 'red', linestyle = '-.')
-plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
+plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'tab:green')
 #plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess', color = 'green', linestyle = '-.')
 plt.legend(loc = 'best')
-plt.title('Actual Rotation Profile splitting values')
+plt.title('True Solar Rotation Profile Splitting values')
 
 plt.show()
 
@@ -221,12 +222,12 @@ def grad_nll(p):
 #take a plot of initial guess
 plt.figure()
 
-plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
-plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess', color = 'red', linestyle = '-.')
-plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
-plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess',color = 'red', linestyle = '-.')
-plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
-plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess', color = 'green', linestyle = '-.')
+plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'tab:red')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess. l = 1', color = 'tab:red', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'tab:blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess. l = 2',color = 'tab:blue', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'tab:green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess. l = 3', color = 'tab:green', linestyle = '-.')
 plt.legend(loc = 'best')
 plt.title('First Guess splitting values')
 plt.show()
@@ -247,18 +248,18 @@ print(gp.log_likelihood(split_vals))
 
 
 plt.figure()
-plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
+plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'red')
 plt.errorbar(freqs[0],split_vals_plot[0],yerr = e_split_vals_1, fmt=".r", capsize=0)
-plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized Guess', color ='red', linestyle = '-.')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized. l = 1', color ='red', linestyle = '-.')
 
-plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
-plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized Guess', color ='blue', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized. l = 2', color ='blue', linestyle = '-.')
 plt.errorbar(freqs[1],split_vals_plot[1],yerr = e_split_vals_2, fmt=".b", capsize=0)
 
-plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
-plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized Guess', color ='green', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized. l  = 3', color ='green', linestyle = '-.')
 plt.errorbar(freqs[2],split_vals_plot[2],yerr = e_split_vals_2, fmt=".g", capsize=0)
-plt.title('optimized')
+plt.title('Optimized first Guess')
 plt.legend(loc = 'best')
 plt.show()
 
@@ -270,7 +271,7 @@ plt.show()
 plt.figure()
 ao,bo,co,do = mean_model.get_parameter_vector()
 plt.plot(flatx,(ao * np.exp((-flatx*bo-co/bo))+do))
-plt.title('Rotation Curve')
+plt.title('Post Optimization Rotation Curve')
 plt.xlabel('r/R')
 plt.ylabel(r'$\Omega$')
 plt.ylim(0,500)
@@ -314,16 +315,16 @@ for s in samples[np.random.randint(len(samples), size=200)]:
     plt.plot(freqs[2], m[28:42], color="green", alpha=0.1)
     
 
-plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
+plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'red')
 plt.errorbar(freqs[0],split_vals_plot[0],yerr = e_split_vals_1, fmt=".r", capsize=0)
-plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized Guess', color ='red', linestyle = '-.')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized. l = 1', color ='red', linestyle = '-.')
 
-plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
-plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized Guess', color ='blue', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized. l = 2', color ='blue', linestyle = '-.')
 plt.errorbar(freqs[1],split_vals_plot[1],yerr = e_split_vals_2, fmt=".b", capsize=0)
 
-plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
-plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized Guess', color ='green', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized. l  = 3', color ='green', linestyle = '-.')
 plt.errorbar(freqs[2],split_vals_plot[2],yerr = e_split_vals_2, fmt=".g", capsize=0)
 
 

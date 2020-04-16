@@ -1,3 +1,4 @@
+
 import sys
 import pymc3 as pm
 import theano.tensor as tt
@@ -94,16 +95,14 @@ e_split_vals_3 = np.array(freqnl.loc[freqnl['l'] == 3]['e_delta'])
 e_split_vals = np.append(e_split_vals_1,e_split_vals_2)
 e_split_vals = np.append(e_split_vals, e_split_vals_3)
 
-#
-#fig = plt.figure(figsize=(12,5)); ax = fig.gca()
-#ax.plot(freqs_1, split_vals_1, lw=3, label="l = 1");
-#ax.plot(freqs_2, split_vals_2, lw=3, label="l = 2");
-#ax.plot(freqs_3, split_vals_3, lw=3, label="l = 3");
-#
-#ax.set_xlabel("Frequency"); ax.set_ylabel("Splitting Value"); plt.legend();
-#plt.title('True Solar Splittings")
-#plt.show()
 
+fig = plt.figure(figsize=(12,5)); ax = fig.gca()
+ax.plot(freqs_1, split_vals_1, lw=3, label="l = 1");
+ax.plot(freqs_2, split_vals_2, lw=3, label="l = 2");
+ax.plot(freqs_3, split_vals_3, lw=3, label="l = 3");
+
+ax.set_xlabel("Frequency"); ax.set_ylabel("Splitting Value"); plt.legend();
+plt.show()
 
 
 modelS = pd.read_table('modelS.dat', sep='\\s+')
@@ -111,8 +110,6 @@ modelS = pd.read_table('modelS.dat', sep='\\s+')
 cs = np.sqrt(modelS['c2'].values)
 r  = modelS['r'].values
 tau = np.hstack((0, -cumtrapz(1./cs, r)))
-
-flatx = flatx
 
 x_diffs = np.zeros_like(flatx)
 for j in range(1,len(flatx)):
@@ -143,28 +140,27 @@ class Model(Model):
     parameter_names = ("a", "b","c","d")
 
     def get_value(self, t):
-        rot_prof = self.a * np.exp((-flatx*self.b-self.c/self.b))+self.d
+        rot_prof = self.a * np.arctan(flatx*self.b-self.c)+self.d
         vals = np.append(splittings(rot_prof,1),splittings(rot_prof,2))
         vals = np.append(vals,splittings(rot_prof,3))
         return vals
 
     def get_value_plot(self, t):
-        rot_prof = self.a * np.exp((-flatx*self.b-self.c/self.b))+self.d
+        rot_prof = self.a * np.arctan(flatx*self.b-self.c)+self.d
         vals = np.array([splittings(rot_prof,1),splittings(rot_prof,2),splittings(rot_prof,3)])
         return vals
 
-truth = dict(a=400, b=-12, c=0.6,  d= 50)#log_sigma=np.log(0.4))
+truth = dict(a=-20, b=-20, c=-13,  d= 440)#log_sigma=np.log(0.4))
 
 kwargs = dict(**truth)
-kwargs["bounds"] = dict(a=(0,700),b = (-15,15),c = (-1,1),d = (0,100))
+kwargs["bounds"] = dict(a=(-100,50),b = (-50,-15),c = (-50,-10),d = (200,500))
 #kwargs["bounds"] = dict(a=(-5,5), b = (0,15),c = (0,10.))
 mean_model = Model(**kwargs)
 
-
 plt.figure()
 ao,bo,co,do = mean_model.get_parameter_vector()
-plt.plot(r[0]*flatx,(ao * np.exp((-flatx*bo-co/bo))+do))
-plt.title('Pre Optimization Rotation Curve')
+plt.plot(flatx,ao * np.arctan(flatx*bo-co)+do)
+plt.title(' Pre Opt Rotation Curve')
 plt.xlabel('r/R')
 plt.ylabel(r'$\Omega$')
 #plt.ylim(0,500)
@@ -179,18 +175,18 @@ actual_2 = splittings(actual_rot,2)
 actual_3 = splittings(actual_rot,3)
 
 
-plt.plot(freqs_1,actual_1,label = 'Splittings using Solar Rot Prof. l = 1', color = 'tab:red')
-plt.plot(freqs_2,actual_2,label = 'Splittings using Solar Rot Prof. l = 2', color = 'tab:blue')
-plt.plot(freqs_3,actual_3,label = 'Splittings using Solar Rot Prof. l = 3', color = 'tab:green')
+plt.plot(freqs_1,actual_1)
+plt.plot(freqs_2,actual_2)
+plt.plot(freqs_3,actual_3)
 
-plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'tab:red')
+plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
 #plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess', color = 'red', linestyle = '-.')
-plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'tab:blue')
+plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
 #plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess',color = 'red', linestyle = '-.')
-plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'tab:green')
+plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
 #plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess', color = 'green', linestyle = '-.')
 plt.legend(loc = 'best')
-plt.title('True Solar Rotation Profile Splitting values')
+plt.title('Actual Rotation Profile splitting values')
 
 plt.show()
 
@@ -199,7 +195,7 @@ plt.show()
 #gp = george.GP(1 * kernels.ExpSquaredKernel(metric=np.array([[1,0],[0,100]]), metric_bounds=[(-5, 5), (None, None), (-5, -2.3)], ndim=2), mean=mean_model)
 
 
-gp = george.GP(1 * kernels.ExpSquaredKernel(metric=1e-3 * np.eye(2), ndim=2, metric_bounds=[(-5, 5), (None, None), (-5, -2.3)]), mean = mean_model)
+gp = george.GP(1 * kernels.ExpSquaredKernel(metric=1e-3 * np.eye(2), ndim=2, metric_bounds=[(-7, 5), (None, None), (-5, -1.5)]), mean = mean_model)
 
 #gp = george.GP(1 * kernels.ExpSquaredKernel(metric=1e-5 * np.eye(2), ndim=2, metric_bounds=[(-10, 10), (None, None), (-6, -2.3)]))
 
@@ -215,13 +211,13 @@ gp.freeze_parameter('kernel:k2:metric:L_0_1')
 gp.compute(xvals, e_split_vals)
 
 def log_prior(p):
-    a, b, c,d,k1_log_constant, k2_M_0, k2_M_1 = p
-    #k1_log_constant, k2_M_0, k2_M_1 = p
-
-#    if not (15 >= b >= 0):
+#    a, b, c,d,k1_log_constant, k2_M_0, k2_M_1 = p
+#    #k1_log_constant, k2_M_0, k2_M_1 = p
+#
+##    if not (15 >= b >= 0):
+##        return -np.inf
+#    if not all(i > 0 for i in (a * np.arctan(flatx*b-c)+d)):
 #        return -np.inf
-    if not all(i > 0 for i in (a * np.exp((-flatx*b)))):
-        return -np.inf
     return 0
 
 
@@ -241,12 +237,12 @@ def grad_nll(p):
 #take a plot of initial guess
 plt.figure()
 
-plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'tab:red')
-plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess. l = 1', color = 'tab:red', linestyle = '-.')
-plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'tab:blue')
-plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess. l = 2',color = 'tab:blue', linestyle = '-.')
-plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'tab:green')
-plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess. l = 3', color = 'tab:green', linestyle = '-.')
+plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'First Guess', color = 'red', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'First Guess',color = 'red', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'First Guess', color = 'green', linestyle = '-.')
 plt.legend(loc = 'best')
 plt.title('First Guess splitting values')
 plt.show()
@@ -256,29 +252,68 @@ plt.show()
 
 print(gp.log_likelihood(split_vals))
 
+
+gp.freeze_parameter('mean:a')
+gp.freeze_parameter('mean:b')
+gp.freeze_parameter('mean:c')
 p0 = gp.get_parameter_vector()
 results = op.minimize(negative_log_prob, p0, method = 'Nelder-Mead', options = dict(maxiter=2000))
-print(results.x)
+
 gp.set_parameter_vector(results.x)
+
+gp.thaw_all_parameters()
+gp.freeze_parameter('kernel:k2:metric:L_0_1')
+gp.freeze_parameter('mean:d')
+
+p0 = gp.get_parameter_vector()
+results = op.minimize(negative_log_prob, p0, method = 'Nelder-Mead', options = dict(maxiter=2000))
+gp.set_parameter_vector(results.x)
+
+gp.set_parameter_vector(results.x)
+
+gp.thaw_all_parameters()
+gp.freeze_parameter('kernel:k2:metric:L_0_1')
+gp.freeze_parameter('mean:a')
+
+p0 = gp.get_parameter_vector()
+results = op.minimize(negative_log_prob, p0, method = 'Nelder-Mead', options = dict(maxiter=2000))
+gp.set_parameter_vector(results.x)
+
+gp.thaw_all_parameters()
+gp.freeze_parameter('kernel:k2:metric:L_0_1')
+
+p0 = gp.get_parameter_vector()
+results = op.minimize(negative_log_prob, p0, method = 'Nelder-Mead', options = dict(maxiter=2000))
+gp.set_parameter_vector(results.x)
+
+
 print(gp.log_likelihood(split_vals))
 
 
+plt.figure()
+ao,bo,co,do = mean_model.get_parameter_vector()
+plt.plot(flatx,ao * np.arctan(flatx*bo-co)+do)
+plt.title('Post Opt Rotation Curve')
+plt.xlabel('r/R')
+plt.ylabel(r'$\Omega$')
+#plt.ylim(0,500)
+plt.show()
 
 
 
 plt.figure()
-plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'red')
+plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
 plt.errorbar(freqs[0],split_vals_plot[0],yerr = e_split_vals_1, fmt=".r", capsize=0)
-plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized. l = 1', color ='red', linestyle = '-.')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized Guess', color ='red', linestyle = '-.')
 
-plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'blue')
-plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized. l = 2', color ='blue', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized Guess', color ='blue', linestyle = '-.')
 plt.errorbar(freqs[1],split_vals_plot[1],yerr = e_split_vals_2, fmt=".b", capsize=0)
 
-plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'green')
-plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized. l  = 3', color ='green', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized Guess', color ='green', linestyle = '-.')
 plt.errorbar(freqs[2],split_vals_plot[2],yerr = e_split_vals_2, fmt=".g", capsize=0)
-plt.title('Optimized first Guess')
+plt.title('optimized')
 plt.legend(loc = 'best')
 plt.show()
 
@@ -287,14 +322,7 @@ plt.show()
 
 
 
-plt.figure()
-ao,bo,co,do = mean_model.get_parameter_vector()
-plt.plot(r[0]*flatx,(ao * np.exp((-flatx*bo-co/bo))+do))
-plt.title('Post Optimization Rotation Curve')
-plt.xlabel('r/R')
-plt.ylabel(r'$\Omega$')
-#plt.ylim(0,500)
-plt.show()
+
 
 
 
@@ -334,16 +362,16 @@ for s in samples[np.random.randint(len(samples), size=200)]:
     plt.plot(freqs[2], m[34:51], color="green", alpha=0.1)
 
 
-plt.plot(freqs[0],split_vals_plot[0],label = 'True Solar Rot. Splittings. l = 1', color = 'red')
+plt.plot(freqs[0],split_vals_plot[0],label = 'Real', color = 'red')
 plt.errorbar(freqs[0],split_vals_plot[0],yerr = e_split_vals_1, fmt=".r", capsize=0)
-plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized. l = 1', color ='red', linestyle = '-.')
+plt.plot(freqs[0],mean_model.get_value_plot(None)[0], label = 'Optimized Guess', color ='red', linestyle = '-.')
 
-plt.plot(freqs[1],split_vals_plot[1],label = 'True Solar Rot. Splittings. l = 2', color = 'blue')
-plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized. l = 2', color ='blue', linestyle = '-.')
+plt.plot(freqs[1],split_vals_plot[1],label = 'Real', color = 'blue')
+plt.plot(freqs[1],mean_model.get_value_plot(None)[1], label = 'Optimized Guess', color ='blue', linestyle = '-.')
 plt.errorbar(freqs[1],split_vals_plot[1],yerr = e_split_vals_2, fmt=".b", capsize=0)
 
-plt.plot(freqs[2],split_vals_plot[2],label = 'True Solar Rot. Splittings. l = 3', color = 'green')
-plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized. l  = 3', color ='green', linestyle = '-.')
+plt.plot(freqs[2],split_vals_plot[2],label = 'Real', color = 'green')
+plt.plot(freqs[2],mean_model.get_value_plot(None)[2], label = 'Optimized Guess', color ='green', linestyle = '-.')
 plt.errorbar(freqs[2],split_vals_plot[2],yerr = e_split_vals_2, fmt=".g", capsize=0)
 
 
@@ -356,13 +384,13 @@ plt.show()
 
 names = gp.get_parameter_names()
 inds = np.array([names.index(k) for k in names])
-corner.corner(sampler.chain[:, 2500:, :].reshape((-1, 7)), labels=names)
+corner.corner(sampler.chain[:, 2500:, :].reshape((-1, 8)), labels=names)
 
-names = gp.get_parameter_names()
-corner.corner(sampler.chain.reshape((-1, 3)), labels=names)
+#names = gp.get_parameter_names()
+#corner.corner(sampler.chain.reshape((-1, 3)), labels=names)
 
 plt.figure()
-fig, axs = plt.subplots(6)
+fig, axs = plt.subplots(7)
 fig.suptitle('Sampler Chains')
 for i in range(50): axs[0].plot(sampler.chain[i,:,0],color = 'tab:blue', alpha = 0.01)
 for i in range(50): axs[1].plot(sampler.chain[i,:,1],color = 'tab:blue', alpha = 0.01)
@@ -374,7 +402,7 @@ for i in range(50): axs[6].plot(sampler.chain[i,:,6],color = 'tab:blue', alpha =
 
 axs[0].set_ylabel('a')
 axs[1].set_ylabel('b')
-axs[2].set_ylabel('b')
+axs[2].set_ylabel('c')
 axs[3].set_ylabel('d')
 axs[4].set_ylabel('Log_constant')
 axs[5].set_ylabel('log_L_0_0')

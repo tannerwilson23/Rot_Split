@@ -7,6 +7,8 @@ from glob import glob
 import pandas as pd
 from scipy.integrate import simps,cumtrapz
 
+from astropy.table import Table
+
 import matplotlib.pyplot as plt
 
 # set the seed
@@ -16,17 +18,12 @@ n = 4800 # The number of data points
 n2 = 20
 X = np.linspace(0, 1, n)[:, None] # The inputs to the GP, they must be arranged as a column vector
 
-x_small = pd.read_table('x')
-x_small = np.array(x_small)
-flatx = x_small.flatten()
-
-flatx_ten = np.array([flatx,flatx,flatx])
+x = np.loadtxt("x", skiprows=1)
+beta_table = Table.read("beta.dat", format="ascii")
+freq_table = Table.read("freq.dat", format="ascii")
 
 
-frequ = pd.read_table('freq.dat', sep='\s+')
 
-
-#load in all of the possible n and l kernels and the associated frequencies
 
 # Load stuff once.
 def load_kernels(dirname="kerns/", size=4800):
@@ -44,92 +41,89 @@ def load_kernels(dirname="kerns/", size=4800):
 
     return kerns
 
-beta = np.loadtxt("beta.dat", skiprows=1) # l, n, beta
-kernels = load_kernels()
+def construct_beta_matrix(beta_table):
+    ls = np.unique(beta_table["l"]).size
+    ns = np.unique(beta_table["n"]).size
 
+    beta = np.nan * np.ones((ls, ns))
+    for row in beta_table:
+        beta[row["l"] - 1, row["n"] - 1] = row["beta"]
+    
+    return beta
 
-###instead of just some x we need to use the acoustic depth
-###
+beta = construct_beta_matrix(beta_table)
 
+kern = load_kernels()
 
+freq_nl = freq_table[(27 > freq_table["n"]) * (freq_table["n"] > 8)]
 
-#def splittings_basic(omega, x, lval):
-#    for l in [lval]:
-#        vals = []
-#        freqs = np.array(frequ.loc[frequ['l'] == l]['nu'])
-#        for i in range(6,28):
-#                delt = simps(omega*kernels[l,i,:], x)
-#                beta_mask = (beta[:, 0] == l) * (beta[:, 1] == i)
-#                if (i == 1):
-#                    print(beta[beta_mask, 2])
-#                delta = beta[beta_mask, 2] * delt
-#                vals.append(delta[0])
-#    np.array(vals)
-#    return freqs, vals
+freqs_1 = freq_nl["Freqs"][freq_nl["l"] == 1]*1E3
+freqs_2 = freq_nl["Freqs"][freq_nl["l"] == 2]*1E3
+freqs_3 = freq_nl["Freqs"][freq_nl["l"] == 3]*1E3
 
 
 
-#load in the correct frequencies
-freqs_1 = np.array(frequ.loc[frequ['l'] == 1]['Freqs'])
-freqs_2 = np.array(frequ.loc[frequ['l'] == 2]['Freqs'])
-freqs_3 = np.array(frequ.loc[frequ['l'] == 3]['Freqs'])
+lone = np.ones((np.shape(freqs_1)[0],2))
+ltwo = 2*np.ones((np.shape(freqs_2)[0],2))
+lthree = 3*np.ones((np.shape(freqs_3)[0],2))
 
-#freqs,vals = splittings_basic(f_true, flatx, 1)
-freqs_1 = freqs_1[:, None]
-freqs_2 = freqs_2[:, None]
-freqs_3 = freqs_3[:, None]
+lone[:,0] = freqs_1
+ltwo[:,0] = freqs_2
+lthree[:,0] = freqs_3
 
-freqs = np.concatenate((freqs_1,freqs_2,freqs_3))
+xvals = np.append(lone,ltwo,axis = 0)
+xvals = np.append(xvals,lthree,axis = 0)
 
-#load in all of the solar splittings
+freqs = np.array([freqs_1,freqs_2,freqs_3])
+
+split_vals_1 = freq_nl["delta"][freq_nl["l"] == 1]
+split_vals_2 = freq_nl["delta"][freq_nl["l"] == 2]
+split_vals_3 = freq_nl["delta"][freq_nl["l"] == 3]
 
 
-split_vals_1 = np.array(frequ.loc[frequ['l'] == 1]['delta'])*1E-4
-split_vals_2 = np.array(frequ.loc[frequ['l'] == 2]['delta'])*1E-4
-split_vals_3 = np.array(frequ.loc[frequ['l'] == 3]['delta'])*1E-4
-split_vals = np.concatenate((split_vals_1,split_vals_2,split_vals_3))
+split_vals_plot = np.array([split_vals_1,split_vals_2,split_vals_3])
 
-## Plot the data and the unobserved latent function
+split_vals = np.append(split_vals_1,split_vals_2)
+split_vals = np.append(split_vals, split_vals_3)
+
+
+
+e_split_vals_1 = freq_nl["e_delta"][freq_nl["l"] == 1]
+e_split_vals_2 = freq_nl["e_delta"][freq_nl["l"] == 1]
+e_split_vals_3 = freq_nl["e_delta"][freq_nl["l"] == 1]
+
+e_split_vals = np.append(e_split_vals_1,e_split_vals_2)
+e_split_vals = np.append(e_split_vals, e_split_vals_3)
+
+
 fig = plt.figure(figsize=(12,5)); ax = fig.gca()
 ax.plot(freqs_1, split_vals_1, lw=3, label="l = 1");
 ax.plot(freqs_2, split_vals_2, lw=3, label="l = 2");
 ax.plot(freqs_3, split_vals_3, lw=3, label="l = 3");
 
-ax.set_xlabel("X"); ax.set_ylabel("y"); plt.legend();
+ax.set_xlabel("Frequency"); ax.set_ylabel("Splitting Value"); plt.legend();
 plt.show()
-#
+
+sol_splittings = pd.read_table('freq.dat',sep='\s+')
+
+split_vals = np.array(sol_splittings['delta'])*1E-4
+
+print(len(freqs),len(split_vals))
 
 #
 #
 #
 #
-x_diffs = np.zeros_like(flatx)
-for j in range(1,len(flatx)):
-    x_diffs[j] = flatx[j] - flatx[j-1]
+x_diffs = np.zeros_like(x)
+for j in range(1,len(x)):
+    x_diffs[j] = x[j] - x[j-1]
 
 
-
-
-#need to change here to be able to take in the range of the n values for the specific l
-#need to spit out all of the possible frequencies and the splitting vlaues and these
-#need to be the same size
-def splittings(omega, x, l):
-    vals = []
-    for n in frequ.loc[frequ['l']==l]['n']: # 0 to 35?
-        area = tt.dot(
-            x_diffs,
-            omega * kernels[l, n, :]
-        )
-        beta_mask = (beta[:, 0] == l) * (beta[:, 1] == n)
-        delta = beta[beta_mask, 2] * area
-
-        vals.append(delta)
-    vals = tt.as_tensor_variable(vals)
-    vals = tt.squeeze(vals)
-    print("vals")
-    print(vals.tag.test_value)
-    return vals
 #
+def splittings(omega, l):
+    print('bruh')
+    area = np.dot(x_diffs, (omega * kern[l, 10:27]).T)
+    return area * beta[l - 1, 9:26]
 #
 class CustomMean(pm.gp.mean.Mean):
 
@@ -145,7 +139,7 @@ class CustomMean(pm.gp.mean.Mean):
         print(len(X))
         l = self.l - 1
         print(l)
-        rot_prof = tt.squeeze(self.a * tt.exp(tt.dot(-flatx,self.b)) + self.c)
+        rot_prof = tt.squeeze(self.a * tt.exp(tt.dot(-x,self.b)) + self.c)
 
         # Debugging
         print("rot_prof: ", rot_prof)
@@ -154,7 +148,7 @@ class CustomMean(pm.gp.mean.Mean):
 
         # A one dimensional column vector of inputs.
 
-        vals = splittings(rot_prof, flatx, self.l)
+        vals = splittings(rot_prof, self.l)
         return vals
 #
 #
@@ -233,3 +227,4 @@ plt.title("Posterior distribution over $f(x)$ at the observed values"); plt.lege
 #]
 #pm.traceplot(trace)
 ## lines=lines, varnames=["η", "σ", "ℓ", "a_var","b_var","c_var"]);
+
